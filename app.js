@@ -86,36 +86,98 @@ function fmtShort(n) {
   return '€'+Math.abs(n).toFixed(0);
 }
 
+// ── Date parser — handles ISO, European DD/MM/YYYY, and Excel serial numbers ──
+function parseDate(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!s || s.toLowerCase() === 'date') return null;
+
+  // ISO: 2026-03-31 or 2026-03-31 03:00:00
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const d = new Date(s.slice(0,10));
+    return isNaN(d) ? null : d;
+  }
+
+  // European: DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+  // We ALWAYS interpret slashes/dots as DD/MM/YYYY for this Cypriot bank
+  const eu = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+  if (eu) {
+    const [,day,mon,yr] = eu;
+    const d = new Date(`${yr}-${mon.padStart(2,'0')}-${day.padStart(2,'0')}`);
+    return isNaN(d) ? null : d;
+  }
+
+  // Excel serial date (number only, e.g. 45000)
+  if (/^\d{5}$/.test(s)) {
+    const d = new Date((parseInt(s) - 25569) * 86400 * 1000);
+    return isNaN(d) ? null : d;
+  }
+
+  // Last resort — native parse (handles "31 Mar 2026" etc.)
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+// ── Number parser — handles "1.234,56" (European) and "1,234.56" (US) ──
+function parseNum(raw) {
+  if (!raw && raw !== 0) return 0;
+  const s = String(raw).trim().replace(/\s/g,'');
+  if (!s || s === '-' || s === '') return 0;
+  // European: 1.234,56 → remove dots, replace comma with dot
+  if (/^\d{1,3}(\.\d{3})*(,\d+)?$/.test(s)) return parseFloat(s.replace(/\./g,'').replace(',','.')) || 0;
+  // US: 1,234.56 → remove commas
+  if (/^\d{1,3}(,\d{3})*(\.\d+)?$/.test(s)) return parseFloat(s.replace(/,/g,'')) || 0;
+  return parseFloat(s) || 0;
+}
+
 // ── CSV Parser ─────────────────────────────────────────────
 function parseCSV(text, year) {
   const rows = Papa.parse(text.trim(),{skipEmptyLines:true}).data;
   const tx=[]; let hi=-1;
-  for(let i=0;i<Math.min(10,rows.length);i++){
+
+  // Scan up to row 15 for the header row containing 'date' and ('debit' or 'credit')
+  for(let i=0;i<Math.min(15,rows.length);i++){
     const r=rows[i].map(c=>String(c).trim().toLowerCase());
-    if(r.includes('date')&&(r.includes('debit')||r.includes('credit'))){hi=i;break;}
+    if(r.includes('date')&&(r.some(x=>x.startsWith('debit'))||r.some(x=>x.startsWith('credit')))){hi=i;break;}
   }
   if(hi===-1) return tx;
+
   const h=rows[hi].map(c=>String(c).trim().toLowerCase());
   const ci={
-    date:h.findIndex(x=>x==='date'),
-    desc:h.findIndex(x=>x.includes('description')),
-    txType:h.findIndex(x=>x.includes('transaction_type')||x.includes('transaction type')),
-    debit:h.findIndex(x=>x==='debit'||x.startsWith('debit')),
-    credit:h.findIndex(x=>x==='credit'||x.startsWith('credit')),
-    balance:h.findIndex(x=>x.includes('balance')||x.includes('indicative')),
+    date:    h.findIndex(x=>x==='date'),
+    desc:    h.findIndex(x=>x.includes('description')),
+    txType:  h.findIndex(x=>x.includes('transaction_type')||x.includes('transaction type')),
+    debit:   h.findIndex(x=>x==='debit'||x.startsWith('debit')),
+    credit:  h.findIndex(x=>x==='credit'||x.startsWith('credit')),
+    balance: h.findIndex(x=>x.includes('indicative')||x.includes('balance')),
   };
+
+  // Validate we found the critical columns
+  if(ci.date===-1||ci.debit===-1) return tx;
+
   for(let i=hi+1;i<rows.length;i++){
     const row=rows[i];
     const rawDate=String(row[ci.date]||'').trim();
-    if(!rawDate||rawDate.toLowerCase()==='date') continue;
-    const dateObj=new Date(rawDate);
-    if(isNaN(dateObj.getTime())) continue;
-    const desc=String(row[ci.desc]||'').trim();
-    const txType=String(row[ci.txType]||'').trim();
-    const debit=parseFloat(row[ci.debit])||0;
-    const credit=parseFloat(row[ci.credit])||0;
-    const balance=parseFloat(row[ci.balance])||0;
+
+    // Skip footer rows that look like summary lines
+    if(!rawDate||/^(total|balance|opening|closing|period)/i.test(rawDate)) continue;
+
+    const dateObj=parseDate(rawDate);
+    if(!dateObj) continue;
+
+    // Sanity check: reject future dates beyond current year + 1
+    if(dateObj.getFullYear() > new Date().getFullYear() + 1) continue;
+    // Reject dates before 2010 (likely parse error)
+    if(dateObj.getFullYear() < 2010) continue;
+
+    const desc   = ci.desc>-1   ? String(row[ci.desc]  ||'').trim() : '';
+    const txType = ci.txType>-1 ? String(row[ci.txType]||'').trim() : '';
+    const debit  = ci.debit>-1  ? parseNum(row[ci.debit])  : 0;
+    const credit = ci.credit>-1 ? parseNum(row[ci.credit]) : 0;
+    const balance= ci.balance>-1? parseNum(row[ci.balance]): 0;
+
     if(debit===0&&credit===0) continue;
+
     const mk=`${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}`;
     const wk=weekStart(dateObj);
     tx.push({
