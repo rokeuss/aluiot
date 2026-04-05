@@ -1,21 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Nim · Bank Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
 
+<!-- ══ LOCK SCREEN ══ -->
 <div id="lock-screen">
   <div class="lock-card">
     <div class="lock-logo">
-      <svg width="44" height="44" viewBox="0 0 40 40" fill="none">
+      <svg width="48" height="48" viewBox="0 0 40 40" fill="none">
         <rect width="40" height="40" rx="10" fill="#1B2A4A"/>
         <path d="M20 8C16.686 8 14 10.686 14 14v2H12a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V18a2 2 0 00-2-2h-2v-2c0-3.314-2.686-6-6-6zm0 3a3 3 0 013 3v2h-6v-2a3 3 0 013-3zm0 10a2 2 0 110 4 2 2 0 010-4z" fill="#60A5FA"/>
       </svg>
@@ -30,12 +31,16 @@
       <button class="num-btn" data-n="1">1</button><button class="num-btn" data-n="2">2</button><button class="num-btn" data-n="3">3</button>
       <button class="num-btn" data-n="4">4</button><button class="num-btn" data-n="5">5</button><button class="num-btn" data-n="6">6</button>
       <button class="num-btn" data-n="7">7</button><button class="num-btn" data-n="8">8</button><button class="num-btn" data-n="9">9</button>
-      <button class="num-btn clear-btn" data-n="clear">⌫</button><button class="num-btn" data-n="0">0</button><button class="num-btn ok-btn" data-n="ok">↵</button>
+      <button class="num-btn clear-btn" data-n="clear">⌫</button>
+      <button class="num-btn" data-n="0">0</button>
+      <button class="num-btn ok-btn" data-n="ok">↵</button>
     </div>
     <p class="lock-error" id="lock-error"></p>
+    <p class="lock-remember">Remembered for 24 hours on this device</p>
   </div>
 </div>
 
+<!-- ══ APP ══ -->
 <div id="app" class="hidden">
   <aside id="sidebar">
     <div class="sidebar-logo">
@@ -45,10 +50,7 @@
       </svg>
       <span>Nim Finance</span>
     </div>
-    <div class="sidebar-year-selector">
-      <label>Year</label>
-      <select id="year-select"></select>
-    </div>
+
     <nav class="sidebar-nav">
       <div class="nav-section-label">Overview</div>
       <a href="#" class="nav-item active" data-view="dashboard">
@@ -78,24 +80,30 @@
         All Transactions
       </a>
     </nav>
+
     <div class="sidebar-footer"><span id="last-updated">Loading…</span></div>
   </aside>
 
   <main id="main">
+    <!-- Top bar -->
     <header class="topbar">
       <div class="topbar-left">
         <button id="menu-toggle" class="icon-btn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
         </button>
         <div class="breadcrumb" id="breadcrumb">
-          <span id="bc-root" class="bc-item">Dashboard</span>
+          <span id="bc-root" class="bc-item active">Dashboard</span>
         </div>
       </div>
       <div class="topbar-right">
-        <div class="month-pills" id="month-pills"></div>
+        <!-- Year + Month pills (two rows) -->
+        <div class="pills-stack">
+          <div class="pill-row year-row" id="year-pills"></div>
+          <div class="pill-row month-row" id="month-pills"></div>
+        </div>
         <div class="search-wrap">
           <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input type="text" id="search-input" placeholder="Search…" />
+          <input type="text" id="search-input" placeholder="Search…"/>
         </div>
       </div>
     </header>
@@ -103,22 +111,28 @@
     <!-- DASHBOARD -->
     <section id="view-dashboard" class="view active">
       <div class="kpi-row" id="kpi-row"></div>
+      <div class="chart-card full" style="margin-bottom:18px">
+        <h3>Monthly Income vs Expenses</h3>
+        <canvas id="chart-cashflow"></canvas>
+      </div>
       <div class="charts-row">
-        <div class="chart-card wide"><h3>Monthly Cash Flow</h3><canvas id="chart-cashflow"></canvas></div>
+        <div class="chart-card wide"><h3>Top Spending Categories</h3><canvas id="chart-bar"></canvas></div>
         <div class="chart-card"><h3>Expenses by Category</h3><canvas id="chart-donut"></canvas></div>
       </div>
-      <div class="chart-card full"><h3>Top Spending Categories</h3><canvas id="chart-bar"></canvas></div>
     </section>
 
     <!-- YEARLY -->
     <section id="view-yearly" class="view hidden">
       <div class="kpi-row" id="yearly-kpi"></div>
-      <div class="charts-row">
-        <div class="chart-card wide"><h3>Monthly Expenses — Full Year</h3><canvas id="chart-yearly-monthly"></canvas></div>
-        <div class="chart-card"><h3>Income vs Expenses by Month</h3><canvas id="chart-yearly-ie"></canvas></div>
+      <div class="chart-card full" style="margin-bottom:18px">
+        <h3>Monthly Income vs Expenses — Full Year</h3>
+        <canvas id="chart-yearly-cashflow"></canvas>
       </div>
-      <div class="chart-card full" style="margin-bottom:20px"><h3>Category Breakdown — Full Year</h3><canvas id="chart-yearly-cats"></canvas></div>
-      <h3 style="margin-bottom:14px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-2)">Month by Month</h3>
+      <div class="charts-row">
+        <div class="chart-card wide"><h3>Category Breakdown — Full Year</h3><canvas id="chart-yearly-cats"></canvas></div>
+        <div class="chart-card"><h3>Expense Distribution</h3><canvas id="chart-yearly-donut"></canvas></div>
+      </div>
+      <h3 class="section-heading">Month by Month</h3>
       <div class="yearly-months-grid" id="yearly-months-grid"></div>
     </section>
 
@@ -129,37 +143,57 @@
 
     <!-- WEEKLY -->
     <section id="view-weekly" class="view hidden">
-      <div class="chart-card full" style="margin-bottom:20px"><h3>Weekly Expenses</h3><canvas id="chart-weekly"></canvas></div>
+      <div class="chart-card full" style="margin-bottom:18px"><h3>Weekly Expenses</h3><canvas id="chart-weekly"></canvas></div>
       <div id="weekly-list"></div>
     </section>
 
-    <!-- CATEGORIES — 3-level drill-down -->
+    <!-- CATEGORIES -->
     <section id="view-categories" class="view hidden">
+      <!-- Level 0: grid -->
       <div id="cat-level-0">
         <div class="cat-summary-bar" id="cat-summary-bar"></div>
         <div class="cat-grid" id="cat-grid"></div>
       </div>
+      <!-- Level 1: category detail (preview + monthly chart + raw data) -->
       <div id="cat-level-1" class="hidden">
         <div class="level-header">
           <button class="back-btn" id="cat-back-0">← All Categories</button>
           <h3 id="cat-l1-title"></h3>
         </div>
-        <div class="charts-row" style="margin-bottom:20px">
-          <div class="chart-card wide"><h3>Monthly Trend</h3><canvas id="chart-cat-trend"></canvas></div>
-          <div class="chart-card"><div id="cat-l1-kpis"></div></div>
+        <!-- Preview KPIs -->
+        <div class="kpi-row" id="cat-kpi-row"></div>
+        <!-- Monthly breakdown chart -->
+        <div class="chart-card full" style="margin-bottom:18px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <h3 style="margin:0">Monthly Breakdown — <span id="cat-chart-label"></span></h3>
+            <span style="font-size:11px;color:var(--text-3)">Click a bar to filter transactions below</span>
+          </div>
+          <canvas id="chart-cat-monthly"></canvas>
         </div>
-        <div class="month-blocks" id="cat-month-blocks"></div>
-      </div>
-      <div id="cat-level-2" class="hidden">
-        <div class="level-header">
-          <button class="back-btn" id="cat-back-1">← Back to Months</button>
-          <h3 id="cat-l2-title"></h3>
+        <!-- Top merchants -->
+        <div class="charts-row" style="margin-bottom:18px">
+          <div class="chart-card"><h3>Top Merchants</h3><div id="cat-merchants"></div></div>
+          <div class="chart-card wide"><h3>Merchant Breakdown</h3><canvas id="chart-cat-merchants"></canvas></div>
+        </div>
+        <!-- Raw data section -->
+        <div class="raw-data-header">
+          <h3>All Transactions</h3>
+          <div class="raw-data-filters">
+            <select id="cat-filter-month"><option value="">All Months</option></select>
+            <input type="text" id="cat-search" placeholder="Search merchant…"/>
+            <span class="row-count" id="cat-row-count"></span>
+          </div>
         </div>
         <div class="table-wrap">
           <table id="cat-tx-table">
             <thead><tr>
-              <th>Line #</th><th>Date</th><th>Merchant</th><th>Full Description</th>
-              <th class="num">Debit</th><th class="num">Credit</th><th>CSV Source</th>
+              <th data-sort="date">Date</th>
+              <th data-sort="merchant">Merchant</th>
+              <th>Full Description</th>
+              <th data-sort="debit" class="num">Debit</th>
+              <th data-sort="credit" class="num">Credit</th>
+              <th>Month</th>
+              <th>CSV Line</th>
             </tr></thead>
             <tbody id="cat-tx-body"></tbody>
           </table>
