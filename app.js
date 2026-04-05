@@ -9,7 +9,8 @@ const State = {
   sortCol: 'date', sortDir: 'desc',
   charts: {},
   catDrillCat: null,
-  catChartMonthFilter: null,   // month selected by clicking bar chart in cat detail
+  catChartMonthFilter: null,
+  cfModalOffset: 0,   // months offset for expanded cashflow modal (0 = most recent end)
 };
 
 // ── Category rules (ORDER MATTERS — first match wins) ──────
@@ -435,6 +436,68 @@ document.getElementById('search-input').addEventListener('input',()=>{
 });
 
 // ══════════════════════════════════════════════════
+// INLINE BAR LABEL PLUGIN (no external dependency)
+// ══════════════════════════════════════════════════
+const BarLabelPlugin = {
+  id: 'barLabels',
+  afterDraw(chart) {
+    const ctx = chart.ctx;
+    chart.data.datasets.forEach((ds, di) => {
+      const meta = chart.getDatasetMeta(di);
+      if (meta.hidden) return;
+      meta.data.forEach((bar, j) => {
+        const val = ds.data[j];
+        if (!val || val < 1) return;
+        const barH = Math.abs(bar.base - bar.y);
+        if (barH < 16) return;
+        const label = val >= 1000 ? '€' + (val/1000).toFixed(1) + 'k' : '€' + Math.round(val);
+        ctx.save();
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.font = `bold ${barH < 28 ? 9 : 10}px DM Sans, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, bar.x, (bar.y + bar.base) / 2);
+        ctx.restore();
+      });
+    });
+  }
+};
+
+// ── Build month-keyed data from allTx ─────────────────
+function buildByMonth(txArr) {
+  const byM = {};
+  txArr.forEach(t => {
+    if (!byM[t.monthKey]) byM[t.monthKey] = { i:0, e:0, lbl:t.month, net:0 };
+    byM[t.monthKey].i += TRUE_INCOME_CATS.has(t.category) ? t.credit : 0;
+    byM[t.monthKey].e += (!TRUE_INCOME_CATS.has(t.category) && t.debit > 0) ? t.debit : 0;
+  });
+  Object.values(byM).forEach(m => m.net = m.i - m.e);
+  return byM;
+}
+
+function makeCashflowDatasets(keys, byM) {
+  return [
+    { label:'Income',   data:keys.map(k=>byM[k].i), backgroundColor:'rgba(74,222,128,.75)',  borderRadius:5 },
+    { label:'Expenses', data:keys.map(k=>byM[k].e), backgroundColor:'rgba(248,113,113,.75)', borderRadius:5 },
+  ];
+}
+
+function cashflowOptions(extraPlugins) {
+  return {
+    responsive: true, maintainAspectRatio: true,
+    plugins: {
+      legend: { labels: { color:'#94A3B8', font:{size:11} } },
+      tooltip: { callbacks: { label: c => `€${c.raw.toLocaleString('en',{minimumFractionDigits:2})}` } },
+      ...extraPlugins,
+    },
+    scales: {
+      x: { ticks:{color:'#64748B',font:{size:11}}, grid:{color:'rgba(255,255,255,.04)'} },
+      y: { ticks:{color:'#64748B',font:{size:11},callback:v=>'€'+v.toLocaleString()}, grid:{color:'rgba(255,255,255,.04)'} },
+    }
+  };
+}
+
+// ══════════════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════════════
 function renderDashboard(){
@@ -458,28 +521,24 @@ function renderDashboard(){
       <div class="kpi-value gold">${lastBal?fmt(lastBal):'—'}</div>
       <div class="kpi-sub">most recent</div></div>
   `;
-  renderCashflowChart(tx);
+  renderCashflowChart();
   renderBarChart(tx);
   renderDonutChart(tx);
 }
 
-function renderCashflowChart(tx){
-  const byM={};
-  tx.forEach(t=>{
-    if(!byM[t.monthKey]) byM[t.monthKey]={i:0,e:0,lbl:t.month};
-    byM[t.monthKey].i+=TRUE_INCOME_CATS.has(t.category)?t.credit:0;
-    byM[t.monthKey].e+=(!TRUE_INCOME_CATS.has(t.category)&&t.debit>0)?t.debit:0;
-  });
-  const keys=Object.keys(byM).sort();
-  const ctx=document.getElementById('chart-cashflow').getContext('2d');
-  if(State.charts.cashflow) State.charts.cashflow.destroy();
-  State.charts.cashflow=new Chart(ctx,{
-    type:'bar',
-    data:{labels:keys.map(k=>byM[k].lbl),datasets:[
-      {label:'Income',   data:keys.map(k=>byM[k].i),backgroundColor:'rgba(74,222,128,.7)', borderRadius:5},
-      {label:'Expenses', data:keys.map(k=>byM[k].e),backgroundColor:'rgba(248,113,113,.7)',borderRadius:5},
-    ]},
-    options:{...chartCfg(),plugins:{...chartCfg().plugins,legend:{labels:{color:'#94A3B8',font:{size:11}}}}}
+function renderCashflowChart(){
+  // Always use allTx — show last 5 months of available data
+  const byM = buildByMonth(State.allTx);
+  const allKeys = Object.keys(byM).sort();
+  const keys = allKeys.slice(-5);
+
+  const ctx = document.getElementById('chart-cashflow').getContext('2d');
+  if (State.charts.cashflow) State.charts.cashflow.destroy();
+  State.charts.cashflow = new Chart(ctx, {
+    type: 'bar',
+    plugins: [BarLabelPlugin],
+    data: { labels: keys.map(k=>byM[k].lbl), datasets: makeCashflowDatasets(keys, byM) },
+    options: cashflowOptions({})
   });
 }
 
@@ -935,6 +994,93 @@ document.querySelectorAll('#tx-table thead th[data-sort]').forEach(th=>{
     renderTransactions();
   });
 });
+
+// ══════════════════════════════════════════════════
+// CASHFLOW MODAL — expanded 12-month view
+// ══════════════════════════════════════════════════
+function openCashflowModal(){
+  State.cfModalOffset = 0;
+  document.getElementById('cf-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  renderCashflowModal();
+}
+
+function closeCashflowModal(){
+  document.getElementById('cf-modal').classList.add('hidden');
+  document.body.style.overflow = '';
+  if (State.charts.cfModal) { State.charts.cfModal.destroy(); State.charts.cfModal = null; }
+}
+
+function renderCashflowModal(){
+  const byM = buildByMonth(State.allTx);
+  const allKeys = Object.keys(byM).sort();
+
+  // 12-month window ending at (allKeys.length - offset)
+  const endIdx = allKeys.length - State.cfModalOffset;
+  const startIdx = Math.max(0, endIdx - 12);
+  const keys = allKeys.slice(startIdx, endIdx);
+
+  // Nav state
+  document.getElementById('cf-nav-prev').disabled = startIdx === 0;
+  document.getElementById('cf-nav-next').disabled = State.cfModalOffset === 0;
+  document.getElementById('cf-nav-label').textContent =
+    keys.length ? `${byM[keys[0]].lbl}  –  ${byM[keys[keys.length-1]].lbl}` : '';
+
+  // Summary row
+  const totIncome   = keys.reduce((s,k)=>s+byM[k].i,0);
+  const totExpenses = keys.reduce((s,k)=>s+byM[k].e,0);
+  const totNet      = totIncome - totExpenses;
+  document.getElementById('cf-modal-totals').innerHTML = `
+    <span class="cf-total green">Income <strong>${fmt(totIncome)}</strong></span>
+    <span class="cf-total red">Expenses <strong>${fmt(totExpenses)}</strong></span>
+    <span class="cf-total ${totNet>=0?'blue':'red'}">Net <strong>${fmt(totNet,true)}</strong></span>
+  `;
+
+  // Monthly breakdown table
+  document.getElementById('cf-modal-table-body').innerHTML = [...keys].reverse().map(k=>{
+    const m = byM[k];
+    const net = m.i - m.e;
+    return `<tr>
+      <td style="font-weight:600;color:var(--text)">${m.lbl}</td>
+      <td style="color:#4ADE80;font-family:var(--font-mono)">${m.i>0?fmt(m.i):'—'}</td>
+      <td style="color:#F87171;font-family:var(--font-mono)">${m.e>0?fmt(m.e):'—'}</td>
+      <td style="color:${net>=0?'#60A5FA':'#F87171'};font-family:var(--font-mono)">${fmt(net,true)}</td>
+    </tr>`;
+  }).join('');
+
+  // Chart
+  const ctx = document.getElementById('chart-cf-modal').getContext('2d');
+  if (State.charts.cfModal) State.charts.cfModal.destroy();
+  State.charts.cfModal = new Chart(ctx, {
+    type: 'bar',
+    plugins: [BarLabelPlugin],
+    data: { labels: keys.map(k=>byM[k].lbl), datasets: makeCashflowDatasets(keys, byM) },
+    options: {
+      ...cashflowOptions({}),
+      maintainAspectRatio: false,
+      scales: {
+        x: { ticks:{color:'#64748B',font:{size:12}}, grid:{color:'rgba(255,255,255,.04)'} },
+        y: { ticks:{color:'#64748B',font:{size:12},callback:v=>'€'+v.toLocaleString()}, grid:{color:'rgba(255,255,255,.04)'} },
+      }
+    }
+  });
+}
+
+// Wire up modal controls
+document.getElementById('cf-modal-close')?.addEventListener('click', closeCashflowModal);
+document.getElementById('cf-modal')?.addEventListener('click', e => { if(e.target===e.currentTarget) closeCashflowModal(); });
+document.getElementById('cf-nav-prev')?.addEventListener('click', ()=>{
+  const byM = buildByMonth(State.allTx);
+  const allKeys = Object.keys(byM).sort();
+  const maxOffset = allKeys.length - 1;
+  State.cfModalOffset = Math.min(State.cfModalOffset + 12, maxOffset);
+  renderCashflowModal();
+});
+document.getElementById('cf-nav-next')?.addEventListener('click', ()=>{
+  State.cfModalOffset = Math.max(0, State.cfModalOffset - 12);
+  renderCashflowModal();
+});
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeCashflowModal(); });
 
 // ══════════════════════════════════════════════════
 // INIT

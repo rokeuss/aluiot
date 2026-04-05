@@ -112,7 +112,13 @@
     <section id="view-dashboard" class="view active">
       <div class="kpi-row" id="kpi-row"></div>
       <div class="chart-card full" style="margin-bottom:18px">
-        <h3>Monthly Income vs Expenses</h3>
+        <div class="chart-card-header">
+          <h3>Monthly Income vs Expenses — last 5 months</h3>
+          <button class="expand-btn" onclick="openCashflowModal()" title="Expand to full history">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+            Expand
+          </button>
+        </div>
         <canvas id="chart-cashflow"></canvas>
       </div>
       <div class="charts-row">
@@ -227,6 +233,44 @@
       </div>
     </section>
   </main>
+</div>
+
+<!-- ══ CASHFLOW EXPANDED MODAL ══ -->
+<div id="cf-modal" class="hidden modal-backdrop">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2 class="modal-title">Monthly Income vs Expenses</h2>
+      <button id="cf-modal-close" class="modal-close">✕</button>
+    </div>
+
+    <!-- Totals summary -->
+    <div id="cf-modal-totals" class="cf-totals-row"></div>
+
+    <!-- Navigation -->
+    <div class="cf-nav">
+      <button id="cf-nav-prev" class="cf-nav-btn">← Older</button>
+      <span id="cf-nav-label" class="cf-nav-label"></span>
+      <button id="cf-nav-next" class="cf-nav-btn">Newer →</button>
+    </div>
+
+    <!-- Big chart -->
+    <div class="modal-chart-wrap">
+      <canvas id="chart-cf-modal"></canvas>
+    </div>
+
+    <!-- Monthly breakdown table -->
+    <div class="modal-table-wrap">
+      <table class="cf-table">
+        <thead><tr>
+          <th>Month</th>
+          <th style="color:#4ADE80">Income</th>
+          <th style="color:#F87171">Expenses</th>
+          <th>Net</th>
+        </tr></thead>
+        <tbody id="cf-modal-table-body"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <div id="loading-overlay" class="hidden">
