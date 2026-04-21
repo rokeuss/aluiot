@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Nim · Bank Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <link rel="stylesheet" href="style.css"/>
@@ -61,6 +61,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Yearly Overview
       </a>
+      <a href="#" class="nav-item" data-view="trends">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/><polyline points="14 7 21 7 21 14"/></svg>
+        Trends
+      </a>
       <div class="nav-section-label">Time</div>
       <a href="#" class="nav-item" data-view="monthly">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
@@ -74,6 +78,10 @@
       <a href="#" class="nav-item" data-view="categories">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v10l6 4"/></svg>
         Categories
+      </a>
+      <a href="#" class="nav-item" data-view="trading">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/></svg>
+        Trading
       </a>
       <a href="#" class="nav-item" data-view="transactions">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h12M9 6h12M9 18h12M3 12h.01M3 6h.01M3 18h.01"/></svg>
@@ -103,23 +111,51 @@
         </div>
         <div class="search-wrap">
           <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input type="text" id="search-input" placeholder="Search…"/>
+          <input type="text" id="search-input" placeholder="Smart search — try ‘wolt &gt;50’ or ‘cat:groceries mar’"/>
+          <span id="search-help" title="Show search hints">?</span>
+          <div class="search-hint-panel" id="search-hint-panel">
+            <h4>Smart Search</h4>
+            <div class="ex">Free text: <code>wolt</code>, <code>netflix</code></div>
+            <div class="ex">Amount: <code>&gt;100</code>, <code>&lt;50</code>, <code>=200</code>, <code>10..80</code></div>
+            <div class="ex">Category: <code>cat:groceries</code></div>
+            <div class="ex">Month: <code>2026-03</code> or <code>mar 2026</code></div>
+            <div class="ex">Type: <code>:income</code>, <code>:expense</code></div>
+            <div class="ex">Combine: <code>wolt &gt;20 mar</code> (all must match)</div>
+          </div>
         </div>
       </div>
     </header>
 
     <!-- DASHBOARD -->
     <section id="view-dashboard" class="view active">
+      <div class="page-banner">
+        <span>Summary of Monthly Expenses</span>
+        <span class="banner-meta" id="banner-meta"></span>
+      </div>
       <div class="kpi-row" id="kpi-row"></div>
       <div class="chart-card full" style="margin-bottom:18px">
         <div class="chart-card-header">
-          <h3>Monthly Income vs Expenses — last 5 months</h3>
-          <button class="expand-btn" onclick="openCashflowModal()" title="Expand to full history">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-            Expand
-          </button>
+          <h3>Monthly Income vs Expenses</h3>
+          <div class="ctrls">
+            <button class="range-btn" data-range="6">6m</button>
+            <button class="range-btn active" data-range="12">12m</button>
+            <button class="range-btn" data-range="24">24m</button>
+            <button class="range-btn" data-range="all">All</button>
+            <button class="expand-btn" onclick="openCashflowModal()" title="Expand to full history">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              Expand
+            </button>
+          </div>
         </div>
         <canvas id="chart-cashflow"></canvas>
+      </div>
+      <div class="chart-card full" style="margin-bottom:18px">
+        <div class="chart-card-header">
+          <h3>Spending Trend (Rolling)</h3>
+          <span style="font-size:11px;color:var(--text-3)">3-month rolling average vs monthly spending</span>
+        </div>
+        <canvas id="chart-trend"></canvas>
+        <div class="trend-summary" id="trend-summary"></div>
       </div>
       <div class="charts-row">
         <div class="chart-card wide"><h3>Top Spending Categories</h3><canvas id="chart-bar"></canvas></div>
@@ -142,6 +178,28 @@
       <div class="yearly-months-grid" id="yearly-months-grid"></div>
     </section>
 
+    <!-- TRENDS -->
+    <section id="view-trends" class="view hidden">
+      <div class="kpi-row" id="trends-kpi"></div>
+      <div class="chart-card full tall" style="margin-bottom:18px">
+        <div class="chart-card-header">
+          <h3>Monthly Expenses — All Available History</h3>
+          <span style="font-size:11px;color:var(--text-3)">With 3-month moving average</span>
+        </div>
+        <canvas id="chart-trends-full"></canvas>
+      </div>
+      <div class="charts-row-eq">
+        <div class="chart-card">
+          <h3>Top Categories — Monthly Trend</h3>
+          <canvas id="chart-trends-cats"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Year-over-Year Comparison</h3>
+          <canvas id="chart-trends-yoy"></canvas>
+        </div>
+      </div>
+    </section>
+
     <!-- MONTHLY -->
     <section id="view-monthly" class="view hidden">
       <div id="monthly-list"></div>
@@ -155,20 +213,16 @@
 
     <!-- CATEGORIES -->
     <section id="view-categories" class="view hidden">
-      <!-- Level 0: grid -->
       <div id="cat-level-0">
         <div class="cat-summary-bar" id="cat-summary-bar"></div>
         <div class="cat-grid" id="cat-grid"></div>
       </div>
-      <!-- Level 1: category detail (preview + monthly chart + raw data) -->
       <div id="cat-level-1" class="hidden">
         <div class="level-header">
           <button class="back-btn" id="cat-back-0">← All Categories</button>
           <h3 id="cat-l1-title"></h3>
         </div>
-        <!-- Preview KPIs -->
         <div class="kpi-row" id="cat-kpi-row"></div>
-        <!-- Monthly breakdown chart -->
         <div class="chart-card full" style="margin-bottom:18px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
             <h3 style="margin:0">Monthly Breakdown — <span id="cat-chart-label"></span></h3>
@@ -176,12 +230,10 @@
           </div>
           <canvas id="chart-cat-monthly"></canvas>
         </div>
-        <!-- Top merchants -->
         <div class="charts-row" style="margin-bottom:18px">
           <div class="chart-card"><h3>Top Merchants</h3><div id="cat-merchants"></div></div>
           <div class="chart-card wide"><h3>Merchant Breakdown</h3><canvas id="chart-cat-merchants"></canvas></div>
         </div>
-        <!-- Raw data section -->
         <div class="raw-data-header">
           <h3>All Transactions</h3>
           <div class="raw-data-filters">
@@ -204,6 +256,42 @@
             <tbody id="cat-tx-body"></tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+    <!-- TRADING -->
+    <section id="view-trading" class="view hidden">
+      <div class="page-banner">
+        <span>Trading Tools — Monthly Spending</span>
+        <span class="banner-meta" id="trading-meta"></span>
+      </div>
+      <div class="kpi-row" id="trading-kpi"></div>
+      <div class="chart-card full" style="margin-bottom:18px">
+        <div class="chart-card-header">
+          <h3>Monthly Trading Spend</h3>
+          <span style="font-size:11px;color:var(--text-3)">Every month with tool purchases</span>
+        </div>
+        <canvas id="chart-trading-monthly"></canvas>
+      </div>
+      <div class="charts-row-eq">
+        <div class="chart-card">
+          <h3>Spend by Tool</h3>
+          <canvas id="chart-trading-tools"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Tool Breakdown</h3>
+          <div class="trading-tools-grid" id="trading-tools-grid"></div>
+        </div>
+      </div>
+      <h3 class="section-heading" style="margin-top:18px">All Trading Transactions</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Tool</th><th>Description</th>
+            <th class="num">Debit</th><th>Month</th><th>CSV Line</th>
+          </tr></thead>
+          <tbody id="trading-tx-body"></tbody>
+        </table>
       </div>
     </section>
 
@@ -242,33 +330,85 @@
       <h2 class="modal-title">Monthly Income vs Expenses</h2>
       <button id="cf-modal-close" class="modal-close">✕</button>
     </div>
-
-    <!-- Totals summary -->
     <div id="cf-modal-totals" class="cf-totals-row"></div>
-
-    <!-- Navigation -->
     <div class="cf-nav">
       <button id="cf-nav-prev" class="cf-nav-btn">← Older</button>
       <span id="cf-nav-label" class="cf-nav-label"></span>
       <button id="cf-nav-next" class="cf-nav-btn">Newer →</button>
     </div>
-
-    <!-- Big chart -->
     <div class="modal-chart-wrap">
       <canvas id="chart-cf-modal"></canvas>
     </div>
-
-    <!-- Monthly breakdown table -->
     <div class="modal-table-wrap">
       <table class="cf-table">
         <thead><tr>
           <th>Month</th>
-          <th style="color:#4ADE80">Income</th>
-          <th style="color:#F87171">Expenses</th>
+          <th style="color:#86EFAC">Income</th>
+          <th style="color:#FCA5A5">Expenses</th>
           <th>Net</th>
         </tr></thead>
         <tbody id="cf-modal-table-body"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ RECATEGORIZE MODAL ══ -->
+<div id="reassign-modal" class="hidden modal-backdrop">
+  <div class="modal-box small">
+    <div class="modal-header">
+      <h2 class="modal-title">Reassign Category</h2>
+      <button id="reassign-close" class="modal-close">✕</button>
+    </div>
+    <div class="reassign-body">
+      <div class="reassign-meta" id="reassign-meta"></div>
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label style="font-size:11px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Pick a category</label>
+          <button class="new-cat-btn" id="open-new-cat">+ New category</button>
+        </div>
+        <div class="cat-pick-grid" id="cat-pick-grid"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="reassign-reset">Reset to auto</button>
+      <button class="btn-secondary" id="reassign-cancel">Cancel</button>
+      <button class="btn-primary" id="reassign-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ NEW CATEGORY MODAL ══ -->
+<div id="newcat-modal" class="hidden modal-backdrop">
+  <div class="modal-box small">
+    <div class="modal-header">
+      <h2 class="modal-title">Create New Category</h2>
+      <button id="newcat-close" class="modal-close">✕</button>
+    </div>
+    <div class="reassign-body">
+      <div class="form-row">
+        <label>Name</label>
+        <input type="text" id="newcat-name" placeholder="e.g. Pet Care"/>
+      </div>
+      <div class="form-row">
+        <label>Icon</label>
+        <div class="emoji-picker" id="newcat-emoji"></div>
+      </div>
+      <div class="form-row">
+        <label>Color</label>
+        <div class="color-picker" id="newcat-color"></div>
+      </div>
+      <div class="form-row">
+        <label>Type</label>
+        <select id="newcat-type">
+          <option value="expense">Expense</option>
+          <option value="income">Income</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="newcat-cancel">Cancel</button>
+      <button class="btn-primary" id="newcat-save">Create</button>
     </div>
   </div>
 </div>
